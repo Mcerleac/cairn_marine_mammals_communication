@@ -11,6 +11,7 @@ With the code in this repository plus the published Hugging Face artifacts, a th
 - fine-tune from published model weights
 - resume from full training checkpoints
 - generate audio examples from the released checkpoints
+- evaluate checkpoints and generation outputs with the supported public utilities
 
 ## Dataset Release
 
