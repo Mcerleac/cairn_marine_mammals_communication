@@ -104,11 +104,21 @@ python3 -m venv .venv
 pip install -e ".[dev]"
 ```
 
+For training with the released configs (CUDA required; installs the 8-bit Adam optimizer):
+
+```bash
+pip install -e ".[training]"
+```
+
 For dataset processing and audio codecs:
 
 ```bash
 pip install -e ".[dataset,audio-codec]"
 ```
+
+## Training data prerequisite
+
+The repository contains the Python training code, but not the tokenized dataset. Before running `scripts/train.py`, download the released Hugging Face dataset into `data/tokenized/sanctsound_humpback_dac/` so it includes the `.npy` token files and `chunk_scores.csv`. See `docs/release_artifacts.md` for the required artifact layout.
 
 ## Minimal Workflows
 

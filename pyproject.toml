@@ -23,6 +23,9 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
+training = [
+    "bitsandbytes>=0.43.0",
+]
 audio-codec = [
     "dac>=0.4.0",
     "lac @ git+https://github.com/hugofloresgarcia/lac.git",

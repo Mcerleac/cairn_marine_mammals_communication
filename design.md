@@ -2,7 +2,9 @@
 
 ## Overview
 
-This document summarizes the complete workflow for acquiring, processing, filtering, tokenizing, and evaluating whale audio datasets. The pipeline spans 10+ data sources totaling ~100+ GB of raw audio, processed through quality grading, denoising, DAC tokenization, and comparative quality analysis.
+> **Public-release note:** This document preserves historical project context. Use docs/release_artifacts.md and docs/evaluation_utilities.md for supported public workflows.
+
+The historical project pipeline spanned 10+ data sources totaling ~100+ GB of raw audio, processed through quality grading, denoising, DAC tokenization, and comparative quality analysis.
 
 **Key Achievement:** Created a unified whale audio dataset of 28GB+ (485K+ chunks) with 9-codebook DAC tokenization, enabling training of audio language models on marine mammal vocalizations.
 
@@ -56,7 +58,7 @@ This document summarizes the complete workflow for acquiring, processing, filter
 **SanctSound HI01 Pilot:**
 - Location: `gs://noaa-passive-bioacoustic/sanctsound/` (GCS bucket)
 - Download script: `scripts/download_sanctsound.py`
-- Processing script: `scripts/process_sanctsound.py`
+- Processing script: `scripts/process_sanctsound_humpback.py`
 - 100 FLAC files (96 kHz stereo) → 3,553 chunks → 20.7M tokens
 
 ### 2.2 Storage Organization
@@ -147,18 +149,13 @@ passes = 2                # Two-pass for consistency
 
 ## 4. Audio Quality Grading
 
-### 4.1 Methodology
+### 4.1 Supported public grading
 
-**Grading Script:** `scripts/grade_audio_quality.py`
+**Utility:** scripts/grade_audio_quality.py
 
-**Metrics Analyzed:**
-1. **Signal-to-Noise Ratio (SNR):** Comparison of vocalization energy to background
-2. **Spectral Clarity:** Presence of distinct frequency peaks characteristic of whale calls
-3. **Peak Frequency Distribution:** Expected frequency ranges for each species
-4. **Spectral Centroid:** Center of mass of frequency spectrum
-5. **Harmonic Structure:** Detection of harmonic relationships in orca/dolphin calls
+The public version scores user-supplied WAV/FLAC with transparent acoustic heuristics: spectral flatness, centroid and bandwidth, RMS, crest factor, and energy variation. It writes a segment-level CSV with a composite 0–1 score and A–F grade.
 
-**Grade Scale:** A (excellent) → F (unusable)
+It is not a whale detector, species classifier, biological-quality score, or replacement for manual review. It does not reproduce the historical multi-source grades below. See docs/evaluation_utilities.md.
 
 ### 4.2 Results Summary
 
@@ -256,7 +253,7 @@ Output shape: (9*T,) = flat 1D sequence
 ### 5.3 Tokenization Workflows
 
 #### SanctSound Main Dataset (9-codebook)
-**Script:** `scripts/tokenize_sanctsound.py`
+**Supported public script:** `scripts/process_sanctsound_humpback.py`
 **Input:** `/data/sanctsound/audio/hi01/` (100 FLAC files, 25 hours)
 **Processing:**
 1. Bandpass 80–20kHz, 30s chunks, per-chunk normalization to 0.9
@@ -272,7 +269,7 @@ Output shape: (9*T,) = flat 1D sequence
 - Quality scores CSV: `chunk_scores.csv` (detector scores, SNR metrics)
 
 #### Denoised 4-Codebook Dataset
-**Script:** `scripts/tokenize_denoised_4cb.py`
+**Historical script:** `scripts/tokenize_denoised_4cb.py` (not included in this release)
 **Input:** `/data/denoised/` (19,006 denoised audio files)
 **Processing:**
 1. Load pre-denoised WAV (medium spectral gating applied)
@@ -288,7 +285,7 @@ Output shape: (9*T,) = flat 1D sequence
 - Improved handling of continuous audio
 
 #### Quality-Filtered A+B Dataset (4-codebook)
-**Script:** `scripts/tokenize_all_audio.py --min-grade A --max-grade B`
+**Historical script:** `scripts/tokenize_all_audio.py` (not included in this release)
 **Processing:** Same as denoised, filtering by quality CSV
 **Output:** `/data/tokenized/all_4cb_ab/`
 - 19,266 files (43% of original 44,609)
@@ -363,17 +360,11 @@ Audio (44.1 kHz, 16-bit)
 5. **Zero Crossing Rate:** Brightness/articulation of reconstructed audio
 6. **Kullback-Leibler Divergence:** Spectral distribution similarity
 
-### 6.2 Quality Analysis Workflow
+### 6.2 Supported reconstruction workflow
 
-**Script:** `scripts/analyze_detokenization_quality.py`
+**Utility:** scripts/evaluate_dac_roundtrip.py
 
-**Process:**
-1. Load original audio file
-2. Load corresponding .npy tokenized codes
-3. Decode tokens back to audio via `dac_tokenizer.decode_tokens_to_audio()`
-4. Compute metrics on original and reconstructed
-5. Compare quality metrics
-6. Generate visualization (spectrograms, metrics plots)
+The public utility encodes and decodes one raw audio file with DAC, aligns the original and reconstruction, and reports SNR and spectral convergence. It can also save the reconstructed WAV. This is a codec-reconstruction measurement, not a model-generation evaluation. See docs/evaluation_utilities.md.
 
 **Example Results (Sample):**
 ```
@@ -481,20 +472,11 @@ token_dir = Path("data/tokenized/sanctsound_humpback_dac/")
 
 ## 9. Generation & Comparative Analysis
 
-### 9.1 Generation Scripts
+### 9.1 Supported public generation
 
-**Long Prompt Generation (SanctSound):**
-- **Script:** `scripts/generate_dac_9cb_long_chunks.py`
-- **Method:** Pick longest chunks by file size (continuous audio indicator)
-- **Prompts:** Top 3 longest files with diversity sampling
-- **Output:** WAV files for each temperature/top_k setting
-- **Summary:** JSON file with generation metrics
+Use scripts/generate_dac_9cb_unified.py for all released checkpoints. It supports score-ranked or explicit prompts and controls for temperature, top-k, top-p, prompt length, continuation length, and output mode. It writes generated_*.wav and, optionally, full_*.wav.
 
-**32K Model Generation:**
-- **Script:** `scripts/generate_dac_9cb_32k_comparison.py`
-- **Prompts:** 4-second + long continuous prompts
-- **Configurations:** Conservative (T=0.70), balanced (T=0.85), diverse (T=1.00)
-- **Output:** Comparison directory with audio files
+Use scripts/analyze_generation_quality.py to write JSON/CSV acoustic descriptors for those WAVs. The historical comparison scripts are not included in this curated release.
 
 ### 9.2 Comparative Results
 
@@ -523,11 +505,8 @@ cd /path/to/marine_mammals_communication
 export PYTHONPATH=.
 
 # Tokenize new data
-python3 scripts/tokenize_sanctsound.py \
-  --input data/sanctsound/audio/hi01/ \
-  --output data/tokenized/sanctsound_humpback_dac/ \
-  --n-codebooks 9 \
-  --quality-csv data/audio_quality_grades.csv
+python3 scripts/process_sanctsound_humpback.py \
+  --codec dac --station hi01
 
 # Train
 python3 scripts/train.py configs/audio_medium_swa_moe_sanctsound_humpback_dac_9cb_32k.yaml
@@ -535,19 +514,17 @@ python3 scripts/train.py configs/audio_medium_swa_moe_sanctsound_humpback_dac_9c
 
 **Generate Samples:**
 ```bash
-# From 32K model
-python3 scripts/generate_dac_9cb_32k_comparison.py \
+python3 scripts/generate_dac_9cb_unified.py \
   --checkpoint runs/audio_medium_swa_moe_sanctsound_humpback_dac_9cb_32k/best_model.pt \
-  --n-prompts 3 \
-  --temperature 0.85 \
-  --top-k 80
+  --token-dir data/tokenized/sanctsound_humpback_dac \
+  --n-samples 3 --temperature 0.85 --top-k 80 \
+  --output-dir runs/prompted_32k --decode-audio both
 ```
 
 **Analyze Generation Quality:**
 ```bash
 python3 scripts/analyze_generation_quality.py \
-  --generated-dir runs/.../comparison_samples/ \
-  --original-dir data/tokenized/sanctsound_humpback_dac/
+  --audio-dir runs/prompted_32k --include-full
 ```
 
 ### 10.2 Troubleshooting
@@ -577,14 +554,15 @@ python3 scripts/analyze_generation_quality.py \
 │   ├── tokenized/
 │   │   └── sanctsound_humpback_dac/   # Main 9CB dataset (28GB+, 485K chunks)
 │   ├── audio_quality_grades.csv       # Quality grades for all segments
-│   └── DATASET_PIPELINE.md            # This file
+│   └── [released dataset artifacts]   # See docs/release_artifacts.md
 ├── scripts/
 │   ├── download_sanctsound.py         # GCS download
-│   ├── process_sanctsound.py          # Bandpass + chunking
-│   ├── tokenize_sanctsound.py         # DAC 9CB tokenization
-│   ├── grade_audio_quality.py         # Quality grading
-│   ├── generate_dac_9cb_*.py          # Generation scripts
-│   └── analyze_generation_quality.py  # Quality analysis
+│   ├── process_sanctsound_humpback.py # Supported preprocessing + DAC tokenization
+│   ├── grade_audio_quality.py          # Raw-audio signal-quality heuristic
+│   ├── evaluate_dac_roundtrip.py       # DAC reconstruction metrics
+│   ├── evaluate_checkpoint.py          # Held-out next-token evaluation
+│   ├── generate_dac_9cb_unified.py     # Supported generation entrypoint
+│   └── analyze_generation_quality.py   # Generated-WAV descriptors
 ├── src/
 │   ├── tokenizer/dac_tokenizer.py    # DAC encoder/decoder
 │   ├── model/transformer.py           # Causal transformer
