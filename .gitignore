@@ -7,7 +7,7 @@ dist/
 .venv/
 
 # Data and artifacts
-data/
+/data/
 models/
 runs/
 logs/
