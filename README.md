@@ -104,6 +104,12 @@ python3 -m venv .venv
 pip install -e ".[dev]"
 ```
 
+For training with the released configs (CUDA required; installs the 8-bit Adam optimizer):
+
+```bash
+pip install -e ".[training]"
+```
+
 For dataset processing and audio codecs:
 
 ```bash

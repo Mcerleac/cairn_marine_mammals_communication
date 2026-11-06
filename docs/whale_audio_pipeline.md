@@ -58,7 +58,7 @@ The historical project pipeline spanned 10+ data sources totaling ~100+ GB of ra
 **SanctSound HI01 Pilot:**
 - Location: `gs://noaa-passive-bioacoustic/sanctsound/` (GCS bucket)
 - Download script: `scripts/download_sanctsound.py`
-- Processing script: `scripts/process_sanctsound.py`
+- Processing script: `scripts/process_sanctsound_humpback.py`
 - 100 FLAC files (96 kHz stereo) → 3,553 chunks → 20.7M tokens
 
 ### 2.2 Storage Organization
