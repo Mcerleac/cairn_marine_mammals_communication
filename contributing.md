@@ -60,17 +60,27 @@ Every Commit should have a message with specifications. If your commit message i
 
 ## Code Style, Linting & Formatting
 
-Name the formatter/linter, config file locations, and the exact commands to check/fix locally.
+Linter: [ruff](https://docs.astral.sh/ruff/), configured in `pyproject.toml` (`[tool.ruff.lint]`). For now it only flags real bugs (syntax errors, undefined names). No formatter yet.
 
-Formatter/linter: None currently
-Config file locations: Configs folder
-Commands: None currently 
+```bash
+ruff check src scripts tests         # check
+ruff check src scripts tests --fix   # auto-fix
+```
 
 ## Testing
 
-Define required test types, how to run tests, expected coverage thresholds, and when new/updated tests are mandatory.
+Tests live in `tests/`. They use **toy-sized models (2 layers, 32-dim) and fake token files** so they run on a CPU in seconds, with no GPU, real data, or checkpoints needed. They exercise the same code paths as real training.
 
-Currently, there is no test suite in our repo for code changes. We will be adding unit tests and an overall test suite, making sure to cover edge cases for each individual Python file. That way, it will be a large set of tests.
+```bash
+pip install torch torchaudio --index-url https://download.pytorch.org/whl/cpu  # optional: smaller CPU-only torch
+pip install -e ".[test]"
+pytest            # fast suite (~20s)
+pytest -m slow    # runs scripts/train.py end-to-end on a toy config (~1 min)
+```
+
+What's covered: every YAML in `configs/` is valid; model forward/backward, causality, and KV cache for dense, SWA+MoE, and NSA variants; dataset windowing, interleaving, and SEP handling; a short training run, checkpoint save/reload/resume; every script's `--help`.
+
+Add or update a test when you change `src/` or add a config. Known bugs are marked `@pytest.mark.xfail(strict=True)`. Remove the marker when you fix one.
 
 We will be expected to run audio through the script grade_audio_quality.py, which will provide a more quantifiable way to measure the performance of the output.
 
@@ -89,7 +99,7 @@ List the checks a change must pass before it merges (tests, review, docs updated
 
 This is going to represent a future state of the projects, but we want to create it hopefully by the end of fall term while we are recreating previous work.
 
-A suite of unit tests for each Python file is planned to be created. These tests will cover edge cases for each major step, and ensure the output looks accurate. If a unit test cannot be created for part of our pipeline, it will be replaced with manual human testing.
+CI must pass (see CI/CD); it runs the unit test suite in `tests/`. If a unit test cannot be created for part of our pipeline, it will be replaced with manual human testing.
 
 For example, in the case of our AI model, it will be hard to run automated tests to ensure the output works. Instead, that will require human judgement and pattern recognition to recognize if a whale song sounds like a whale song based on our knowledge, and not something wildly different. If all checks pass, a commit may be sent. Merging will only happen after the code is reviewed by one different team member, assuming it passed the test suite without resorting to falsifying test suite results. (Adding if statements to set it to true by default).
 
@@ -157,9 +167,11 @@ No direct pushes to main
 
 ## CI/CD
 
-Link to pipeline definitions, list mandatory jobs, how to view logs/re-run jobs, and what must pass before merge/release.
+GitHub Actions: [.github/workflows/ci.yml](.github/workflows/ci.yml). It runs on every PR and every push to `master` (about 5 min, CPU only). Steps: ruff → compile all scripts → `pytest` → `pytest -m slow`. All must pass before merge. Logs and re-runs are in the repo's **Actions** tab.
 
-Currently no CI/CD pipeline 
+Real training runs and audio-quality checks stay manual (see Testing / Definition of Done).
+
+Admin TODO: in repo Settings → Branches, make the `CI / test` check required on `master`.
 
 ## Security & Secrets
 
