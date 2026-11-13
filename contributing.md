@@ -2,7 +2,7 @@
 
 How to set up, code, test, review, and release so contributions meet our Definition of Done.
 
-For now, our goal is to add on, rather than detract from the codebase. We are building on existing work, and to avoid breaking underlying code that already exists and functions, we will be adding things on when needed, and replacing only with confirmation from others.
+add on, rather than detract from the codebase. We are building on existing work, do not push without passing unit tests.
 
 We do expect to run at least one code review done by another member of the team before merging into the codebase.
 
@@ -47,11 +47,10 @@ Branch naming: Will be based on the work being done in the branch, eg if someone
 Rebase vs merge: Merge will be mainly used since it is consistently safer than rebase, but rebase can be used if not working on a branch someone else is working on. 
 ## Issues & Planning
 
-Explain how to file issues, required templates/labels, estimation, and triage/assignment practices.
+Planning handled through docs/board.txt
 
-Issues will be filed using the issue tracker in Github Projects. Check for existing issues before making a new one. Label it appropriately (bug, feature, etc.). Provide an estimate of complexity (trivial, straightforward, complex, etc.)
-
-
+Issues can be raised on the github issues page
+(if page not working put them on the board)
 
 ## Commit Messages
 
@@ -66,6 +65,7 @@ Name the formatter/linter, config file locations, and the exact commands to chec
 Formatter/linter: None currently
 Config file locations: Configs folder
 Commands: None currently 
+
 ## Testing
 
 Define required test types, how to run tests, expected coverage thresholds, and when new/updated tests are mandatory.
