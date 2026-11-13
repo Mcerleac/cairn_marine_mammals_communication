@@ -1,0 +1,54 @@
+on:
+  push:
+    branches: ["*"]
+  pull_request:
+    branches: ["main"]
+
+jobs:
+  build-and-test:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: "pip"
+
+      - name: Install CPU PyTorch and package dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install torch torchaudio --index-url https://download.pytorch.org/whl/cpu
+          pip install -e ".[dev]"
+
+      - name: Run automated pytest unit & integration suite
+        run: |
+          PYTHONPATH=. pytest -v
+
+      - name: End-to-End Walking Skeleton CLI Smoke Test (CPU)
+        run: |
+          PYTHONPATH=. python3 -c "
+          import tempfile, subprocess, sys, numpy as np, pandas as pd, torch
+          from pathlib import Path
+          from src.model.config import TINY
+          from src.model.transformer import CausalTransformer
+
+          with tempfile.TemporaryDirectory() as tmp:
+              p = Path(tmp)
+              ckpt = p / 'tiny.pt'
+              model = CausalTransformer(TINY)
+              torch.save({'step': 5, 'val_loss': 3.8, 'config': TINY, 'model_state_dict': model.state_dict()}, ckpt)
+
+              # 1. Verify checkpoint description and weight analysis CLIs
+              subprocess.run([sys.executable, 'scripts/describe_checkpoint.py', str(ckpt), '--json'], check=True)
+              subprocess.run([sys.executable, 'scripts/analyze_checkpoint_weights.py', str(ckpt), '--summary-only'], check=True)
+
+              # 2. Verify forward branch telemetry CLI
+              subprocess.run([
+                  sys.executable, 'scripts/measure_forward_branches.py', str(ckpt),
+                  '--sequence-length', '36', '--json-out', str(p / 'forward.json')
+              ], check=True)
+              assert (p / 'forward.json').is_file()
+          "
