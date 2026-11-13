@@ -1,3 +1,5 @@
+cat << 'EOF' > tests/test_pipeline.py
+"""Automated CPU unit and integration tests for cairn-marine-mammals-communication."""
 from pathlib import Path
 import numpy as np
 import pandas as pd
@@ -31,7 +33,8 @@ def test_audio_token_dataset_concat_and_filtering(tmp_path: Path):
     """FR-2: Verify AudioTokenDataset filters by detector_score and inserts SEP/SEP_GAP tokens."""
     rng = np.random.default_rng(7)
     for idx in range(3):
-        arr = rng.integers(1, 1025, size=(9, 12), dtype=np.int32)
+        # 9 codebooks x 4 timesteps = 36 interleaved tokens per file so SEP sits at index 36 (< 64)
+        arr = rng.integers(1, 1025, size=(9, 4), dtype=np.int32)
         np.save(tmp_path / f"sanctsound_hi01_01_00000{idx}.npy", arr)
 
     scores_csv = tmp_path / "chunk_scores.csv"
@@ -53,11 +56,12 @@ def test_audio_token_dataset_concat_and_filtering(tmp_path: Path):
         score_file=scores_csv,
         min_detector_score=0.7,
     )
-    assert len(ds) > 0
+    assert len(ds) == 1
     sample = ds[0]
     assert sample["input_ids"].shape == (64,)
     assert sample["target_ids"].shape == (64,)
-    assert (sample["input_ids"] == 9218).any() or (sample["target_ids"] == 9218).any()
+    # SEP token (9218) must appear at boundary index 36 between file 0 and file 1
+    assert sample["input_ids"][36].item() == 9218
 
 
 def test_transformer_forward_and_kv_generation():
@@ -114,7 +118,10 @@ def test_checkpoint_roundtrip_and_weight_analysis(tmp_path: Path):
         torch.testing.assert_close(model(x)["logits"], loaded_model(x)["logits"])
 
     report = analyze_state_dict(loaded_ckpt["model_state_dict"], loaded_cfg, include_tensors=True)
-    assert report["overall"]["parameter_count"] == model.count_parameters()
+    rope_buffer_elems = model.rope.inv_freq.numel()
+    # analyze_state_dict deduplicates tied weights (token_emb / lm_head) and includes rope.inv_freq buffer
+    assert report["overall"]["parameter_count"] == model.count_parameters() + rope_buffer_elems
+    assert any(t["is_shared_alias"] for t in report["tensors"])
 
 
 def test_muon_optimizer_decreases_loss():
@@ -152,3 +159,4 @@ def test_acoustic_and_roundtrip_metrics():
 
     m = quality_metrics(whale_tone, sr)
     assert grade(score(m)) in {"A", "B", "C"}
+EOF
