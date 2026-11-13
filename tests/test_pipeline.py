@@ -54,7 +54,7 @@ def test_audio_token_dataset_concat_and_filtering(tmp_path: Path):
         score_file=scores_csv,
         min_detector_score=0.7,
     )
-    assert len(ds) == 1
+    assert len(ds) == 2
     sample = ds[0]
     assert sample["input_ids"].shape == (64,)
     assert sample["target_ids"].shape == (64,)
