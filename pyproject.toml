@@ -37,6 +37,10 @@ dataset = [
     "tensorflow-cpu>=2.21.0",
     "tensorflow-hub>=0.16.1",
 ]
+test = [
+    "pytest>=8.0",
+    "ruff>=0.6",
+]
 dev = [
     "ipykernel>=6.0",
     "ipywidgets>=8.0",
@@ -46,3 +50,13 @@ dev = [
 [tool.setuptools.packages.find]
 where = ["."]
 include = ["src*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["."]
+markers = ["slow: end-to-end checks (still CPU-only and toy-sized)"]
+addopts = "-m 'not slow'"
+
+[tool.ruff.lint]
+# Start with "definitely a bug" rules only; add style rules later.
+select = ["E9", "F63", "F7", "F82"]  # TODO: add F401 (unused imports) after the model-architecture work lands

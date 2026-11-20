@@ -440,7 +440,8 @@ class MoEFeedForward(nn.Module):
             tokens = x_flat[tok_idx[mask]]
             out = expert(tokens)
             idx = tok_idx[mask].unsqueeze(-1).expand_as(out)
-            output.scatter_add_(0, idx, out * flat_w[mask].unsqueeze(-1))
+            # .to(): CPU autocast keeps softmax in bf16 (CUDA promotes it to fp32)
+            output.scatter_add_(0, idx, (out * flat_w[mask].unsqueeze(-1)).to(output.dtype))
 
         return output.view(B, T, D)
 
