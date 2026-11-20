@@ -125,6 +125,23 @@ class CausalSelfAttention(nn.Module):
         attn_out = attn_out.transpose(1, 2).contiguous().view(B, T, C)
         return self.out_proj(attn_out), new_cache
 
+def _swa_chunk(q, k, v, q_start, q_end, k_start, k_end, W, dropout_p):
+    """Attention for one SWA chunk with an explicit trailing-window mask.
+
+    Q and K differ in length, so is_causal=True would misalign the mask.
+    Each query attends to exactly the W most recent tokens, itself included,
+    matching the KV-cache generation path.
+    """
+    qp = torch.arange(q_start, q_end, device=q.device)[:, None]
+    kp = torch.arange(k_start, k_end, device=q.device)[None, :]
+    mask = (kp <= qp) & (kp > qp - W)
+    return F.scaled_dot_product_attention(
+        q[:, :, q_start:q_end, :],
+        k[:, :, k_start:k_end, :],
+        v[:, :, k_start:k_end, :],
+        attn_mask=mask,
+        dropout_p=dropout_p)
+
 
 class SlidingWindowAttention(nn.Module):
     """Multi-head causal self-attention with sliding window and RoPE.
@@ -209,11 +226,8 @@ class SlidingWindowAttention(nn.Module):
                         q_end = min((c + 1) * W, T)
                         k_start = max(0, (c - 1) * W)
                         k_end = q_end
-                        out_chunk = F.scaled_dot_product_attention(
-                            q[:, :, q_start:q_end, :],
-                            k[:, :, k_start:k_end, :],
-                            v[:, :, k_start:k_end, :],
-                            is_causal=True,
+                        out_chunk = _swa_chunk(
+                            q, k, v, q_start, q_end, k_start, k_end, W,
                             dropout_p=self.dropout.p if self.training else 0.0)
                         outputs.append(out_chunk)
                     attn_out = torch.cat(outputs, dim=2)
@@ -232,11 +246,9 @@ class SlidingWindowAttention(nn.Module):
                         q_end = min((c + 1) * W, T)
                         k_start = max(0, (c - 1) * W)
                         k_end = q_end
-                        outputs.append(F.scaled_dot_product_attention(
-                            q[:, :, q_start:q_end, :],
-                            k[:, :, k_start:k_end, :],
-                            v[:, :, k_start:k_end, :],
-                            is_causal=True, dropout_p=0.0))
+                        outputs.append(_swa_chunk(
+                            q, k, v, q_start, q_end, k_start, k_end, W,
+                            dropout_p=0.0))
                     attn_out = torch.cat(outputs, dim=2)
 
         attn_out = attn_out.transpose(1, 2).contiguous().view(B, T, C)
