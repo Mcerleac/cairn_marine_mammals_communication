@@ -62,11 +62,6 @@ def test_kv_cache_matches_full_forward(arch):
     assert torch.allclose(full, torch.cat(steps, dim=1), atol=1e-4)
 
 
-@pytest.mark.xfail(strict=True, reason=(
-    "Known bug: chunked SWA uses is_causal=True with non-square Q/K, which PyTorch aligns "
-    "top-left. Tokens at position >= window see a window shifted back by W and never themselves. "
-    "Remove this marker once fixed."
-))
 def test_sliding_window_matches_reference_mask():
     W, T, D, H = 4, 12, 16, 2
     cfg = make_tiny_cfg(d_model=D, n_heads=H, swa_window_size=W, full_attention_every_n=2)
