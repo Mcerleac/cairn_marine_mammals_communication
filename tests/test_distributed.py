@@ -24,6 +24,7 @@ from torch.utils.data.distributed import DistributedSampler
 from src.model.transformer import CausalTransformer
 from src.training.distributed import (
     DistInfo,
+    cleanup_distributed,
     dist_info_from_env,
     init_distributed,
     interval_reached,
@@ -121,6 +122,7 @@ def _worker(rank, world, port, arch, out_dir, result_file):
     os.environ.update(MASTER_ADDR="127.0.0.1", MASTER_PORT=str(port), WORLD_SIZE=str(world),
                       RANK=str(rank), LOCAL_RANK=str(rank), USE_LIBUV="0")
     info, device = init_distributed("cpu")
+    finished = False
     try:
         torch.manual_seed(0)
         model = CausalTransformer(make_tiny_cfg(vocab_size=VOCAB, **ARCHS[arch]))
@@ -145,8 +147,9 @@ def _worker(rank, world, port, arch, out_dir, result_file):
         if rank == 0:
             max_rank_diff = max((g - gathered[0]).abs().max().item() for g in gathered)
             torch.save({"max_rank_diff": max_rank_diff}, result_file)
+        finished = True
     finally:
-        dist.destroy_process_group()
+        cleanup_distributed(wait_for_all=finished)
 
 
 def _spawn(tmp_path, arch, world=2):

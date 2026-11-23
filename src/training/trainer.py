@@ -201,7 +201,6 @@ class Trainer:
                 device_ids=[self.dist.local_rank] if self.device_type == "cuda" else None,
                 find_unused_parameters=find_unused,
                 gradient_as_bucket_view=True,   # gradients share DDP's buffers: no extra copy in memory
-                broadcast_buffers=False,        # only buffer is the constant RoPE table
             )
 
         eff = config.batch_size * self.local_accum * self.world_size

@@ -61,10 +61,13 @@ def main():
 
     # Joins the process group when launched by torchrun; otherwise a no-op.
     dist_info, device = init_distributed(args.device)
+    finished = False
     try:
         _train(args, cfg, dist_info, device)
+        finished = True
     finally:
-        cleanup_distributed()
+        # On success, wait for all processes before disconnecting; on error, exit at once.
+        cleanup_distributed(wait_for_all=finished)
 
 
 def _train(args, cfg, dist_info, device):

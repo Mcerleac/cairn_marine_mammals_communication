@@ -82,8 +82,18 @@ def init_distributed(requested_device: str) -> tuple[DistInfo, str]:
     return info, device
 
 
-def cleanup_distributed() -> None:
+def cleanup_distributed(wait_for_all: bool = True) -> None:
+    """Leave the process group.
+
+    wait_for_all=True (normal exit): first wait until every process gets here,
+    so no process disconnects while another is still saving or communicating;
+    gloo can abort the process if they shut down out of step. Pass False when
+    leaving because of an error: waiting would then hang instead of exiting,
+    and the launcher could not see the failure.
+    """
     if dist.is_available() and dist.is_initialized():
+        if wait_for_all:
+            dist.barrier()
         dist.destroy_process_group()
 
 
