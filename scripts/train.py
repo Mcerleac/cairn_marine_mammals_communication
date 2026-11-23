@@ -1,11 +1,19 @@
 #!/usr/bin/env python3
-"""Training script for marine mammal communication LLM."""
+"""Training script for marine mammal communication LLM.
+
+Single GPU:
+    python scripts/train.py configs/<config>.yaml
+
+Several GPUs (any number; torchrun starts one process per GPU):
+    torchrun --nproc_per_node=8 scripts/train.py configs/<config>.yaml
+"""
 
 import argparse
 
 import torch
 import yaml
 from torch.utils.data import DataLoader
+from torch.utils.data.distributed import DistributedSampler
 
 from src.data.dataset import AudioTokenDataset, create_symbolic_datasets
 from src.model.checkpoints import (
@@ -17,13 +25,20 @@ from src.model.checkpoints import (
 )
 from src.model.config import get_config
 from src.model.transformer import CausalTransformer
+from src.training.distributed import cleanup_distributed, init_distributed
 from src.training.trainer import TrainConfig, Trainer
 
 
 def main():
     parser = argparse.ArgumentParser(description="Train marine mammal LLM")
     parser.add_argument("config", type=str, help="Path to YAML config file")
-    parser.add_argument("--device", type=str, default="cuda")
+    parser.add_argument(
+        "--device",
+        type=str,
+        default="cuda",
+        help="Device for a single-process run. Under torchrun each process uses cuda:<LOCAL_RANK> "
+             "(or cpu, for testing, if --device cpu).",
+    )
     parser.add_argument(
         "--init-from",
         type=str,
@@ -44,8 +59,17 @@ def main():
     with open(args.config) as f:
         cfg = yaml.safe_load(f)
 
+    # Joins the process group when launched by torchrun; otherwise a no-op.
+    dist_info, device = init_distributed(args.device)
+    try:
+        _train(args, cfg, dist_info, device)
+    finally:
+        cleanup_distributed()
+
+
+def _train(args, cfg, dist_info, device):
     print(f"Config: {args.config}")
-    print(f"Device: {args.device}")
+    print(f"Device: {device}" + (f" (+{dist_info.world_size - 1} more processes)" if dist_info.enabled else ""))
 
     print("\n=== Loading data ===")
     dataset_type = cfg["data"]["dataset_type"]
@@ -128,15 +152,22 @@ def main():
         print(f"Vocab size: {vocab_size}")
 
     batch_size = cfg["training"]["batch_size"]
-    loader_kwargs = dict(
-        pin_memory=True,
-        num_workers=4,
-        persistent_workers=True,
-        prefetch_factor=4,
-    )
+    num_workers = cfg["training"].get("num_workers", 4)  # per GPU process
+    loader_kwargs = dict(pin_memory=True, num_workers=num_workers)
+    if num_workers > 0:
+        loader_kwargs.update(persistent_workers=True, prefetch_factor=4)
     val_batch_size = cfg["training"].get("val_batch_size", batch_size * 4)
-    train_loader = DataLoader(train_ds, batch_size=batch_size, shuffle=True, **loader_kwargs)
-    val_loader = DataLoader(val_ds, batch_size=val_batch_size, shuffle=False, **loader_kwargs)
+    if dist_info.enabled:
+        # Each GPU gets its own, non-overlapping share of the data.
+        train_sampler = DistributedSampler(
+            train_ds, num_replicas=dist_info.world_size, rank=dist_info.rank, shuffle=True)
+        val_sampler = DistributedSampler(
+            val_ds, num_replicas=dist_info.world_size, rank=dist_info.rank, shuffle=False)
+        train_loader = DataLoader(train_ds, batch_size=batch_size, sampler=train_sampler, **loader_kwargs)
+        val_loader = DataLoader(val_ds, batch_size=val_batch_size, sampler=val_sampler, **loader_kwargs)
+    else:
+        train_loader = DataLoader(train_ds, batch_size=batch_size, shuffle=True, **loader_kwargs)
+        val_loader = DataLoader(val_ds, batch_size=val_batch_size, shuffle=False, **loader_kwargs)
 
     print("\n=== Creating model ===")
     ckpt_path = args.resume_from or args.init_from
@@ -192,6 +223,8 @@ def main():
         use_muon=cfg["training"].get("use_muon", False),
         muon_lr=cfg["training"].get("muon_lr", 0.01),
         output_dir=cfg["training"]["output_dir"],
+        keep_effective_batch=cfg["training"].get("keep_effective_batch", True),
+        ddp_find_unused_parameters=cfg["training"].get("ddp_find_unused_parameters", None),
     )
 
     print("\n=== Training ===")
@@ -201,8 +234,9 @@ def main():
         train_loader,
         val_loader,
         train_cfg,
-        device=args.device,
+        device=device,
         resume_from=args.resume_from,
+        dist_info=dist_info,
     )
     trainer.train()
 
